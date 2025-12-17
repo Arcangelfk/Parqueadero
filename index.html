@@ -1,0 +1,1328 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión Parqueadero & Lavadero</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .dark ::-webkit-scrollbar-thumb { background: #475569; }
+        .dark ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        /* Estilos de Impresión y Ticket */
+        @media print {
+            body * { visibility: hidden; }
+            #receipt-container, #receipt-container * { visibility: visible; }
+            #receipt-container {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%; /* Ajuste para impresora térmica */
+                margin: 0;
+                padding: 0;
+                background: white;
+                color: black;
+                display: block !important;
+            }
+            /* Ocultar modales al imprimir */
+            #ticketModal, #checkoutModal, #settingsModal, #clearHistoryModal, #reportModal { display: none !important; }
+        }
+
+        /* Clase para simular fuente de recibo en pantalla */
+        .font-receipt { font-family: 'Courier New', Courier, monospace; }
+    </style>
+</head>
+
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans h-screen flex flex-col overflow-hidden transition-colors duration-200">
+
+    <header class="bg-slate-900 dark:bg-slate-950 text-white p-4 shadow-lg flex justify-between items-center z-10 shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="bg-emerald-500 p-2 rounded-lg shadow-emerald-500/20 shadow-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+            </div>
+            <div>
+                <h1 id="headerAppName" class="text-xl font-bold tracking-wide">Gestión de Parqueadero</h1>
+                <p class="text-xs text-slate-400">Sistema Integral v5.0 (Ticket Pro)</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="text-right hidden sm:block">
+                <p id="clock" class="text-lg font-mono font-bold"></p>
+                <p id="date" class="text-xs text-slate-400 uppercase tracking-wider"></p>
+            </div>
+
+            <button onclick="toggleReport()" class="p-2 bg-indigo-600 hover:bg-indigo-500 rounded-full transition-colors text-white shadow-lg shadow-indigo-500/30" title="Reporte del Día">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+            </button>
+            <button onclick="toggleTheme()" class="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-white" title="Cambiar Tema">
+                <svg id="themeIconSun" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                <svg id="themeIconMoon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+            </button>
+            <button onclick="toggleHistory()" class="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-white" title="Historial">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            </button>
+            <button onclick="toggleSettings()" class="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-white" title="Configuración">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+        <aside class="w-full md:w-96 bg-white dark:bg-slate-800 shadow-xl flex flex-col z-20 overflow-y-auto transition-colors duration-200 border-r border-slate-200 dark:border-slate-700">
+            <div class="p-6 border-b border-slate-100 dark:border-slate-700">
+                <h2 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Ingreso de Vehículo</h2>
+                <form id="entryForm" onsubmit="handleEntry(event)" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Placa del Vehículo <span class="text-red-500">*</span></label>
+                        <input type="text" id="plateInput" required placeholder="ABC-123" class="w-full text-2xl font-mono uppercase bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 dark:text-white rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-center tracking-widest placeholder-slate-300 dark:placeholder-slate-500">
+                    </div>
+
+                    <div class="space-y-3 pt-2">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Nombre</label>
+                            <input type="text" id="ownerNameInput" placeholder="Nombre completo" class="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 dark:text-white rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Celular</label>
+                                <input type="tel" id="ownerPhoneInput" placeholder="300..." class="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 dark:text-white rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Cédula</label>
+                                <input type="text" id="ownerIdInput" placeholder="CC..." class="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 dark:text-white rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3 pt-2">
+                        <label class="cursor-pointer">
+                            <input type="radio" name="vehicleType" value="car" class="peer sr-only" checked>
+                            <div class="p-3 text-center border border-slate-200 dark:border-slate-600 rounded-lg peer-checked:bg-slate-800 dark:peer-checked:bg-slate-900 peer-checked:text-white dark:text-slate-300 peer-checked:border-slate-800 dark:peer-checked:border-slate-900 transition-all hover:bg-slate-50 dark:hover:bg-slate-700">
+                                <span class="font-bold">Carro</span>
+                            </div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="vehicleType" value="moto" class="peer sr-only">
+                            <div class="p-3 text-center border border-slate-200 dark:border-slate-600 rounded-lg peer-checked:bg-slate-800 dark:peer-checked:bg-slate-900 peer-checked:text-white dark:text-slate-300 peer-checked:border-slate-800 dark:peer-checked:border-slate-900 transition-all hover:bg-slate-50 dark:hover:bg-slate-700">
+                                <span class="font-bold">Moto</span>
+                            </div>
+                        </label>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Servicio Adicional</label>
+                        <select id="serviceInput" class="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 dark:text-white rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            </select>
+                    </div>
+
+                    <button type="submit" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-4 rounded-lg shadow-lg hover:shadow-emerald-500/30 transform active:scale-95 transition-all text-lg flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                        </svg>
+                        REGISTRAR E IMPRIMIR
+                    </button>
+
+                    <p id="entryMessage" class="text-center text-sm font-medium h-5"></p>
+                </form>
+            </div>
+
+            <div class="p-6 bg-slate-50 dark:bg-slate-800/50 flex-1">
+                <h3 class="text-xs font-bold text-slate-400 uppercase mb-4">Resumen del Día</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-white dark:bg-slate-700 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-600">
+                        <p class="text-slate-500 dark:text-slate-400 text-xs">Vehículos Activos</p>
+                        <p id="activeCount" class="text-2xl font-bold text-slate-800 dark:text-white">0</p>
+                    </div>
+                    <div class="bg-white dark:bg-slate-700 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-600">
+                        <p class="text-slate-500 dark:text-slate-400 text-xs">Total Recaudado</p>
+                        <p id="totalRevenue" class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">$0</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <section class="flex-1 p-6 overflow-hidden flex flex-col bg-slate-100 dark:bg-slate-900 transition-colors duration-200">
+            <h2 class="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                <span class="w-2 h-8 bg-blue-600 rounded-full inline-block"></span>
+                Vehículos en Patio
+            </h2>
+
+            <div class="mb-4 bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input type="text" id="searchInput" onkeyup="renderTable()" placeholder="Buscar por Placa, Nombre, Cédula o Celular..." class="w-full bg-transparent outline-none text-slate-700 dark:text-slate-200 placeholder-slate-400">
+            </div>
+
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex-1 overflow-hidden flex flex-col transition-colors duration-200">
+                <div class="overflow-auto flex-1">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-10 backdrop-blur-sm">
+                            <tr>
+                                <th class="p-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Placa / Cliente</th>
+                                <th class="p-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Tipo</th>
+                                <th class="p-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Hora Entrada</th>
+                                <th class="p-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Servicio</th>
+                                <th class="p-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Tiempo</th>
+                                <th class="p-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase text-right">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="vehicleTableBody" class="divide-y divide-slate-100 dark:divide-slate-700 text-slate-700 dark:text-slate-300">
+                            </tbody>
+                    </table>
+                </div>
+                <div id="emptyState" class="hidden flex-col items-center justify-center h-full p-10 text-slate-400 dark:text-slate-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    <p>No se encontraron resultados</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="historyPanel" class="absolute inset-0 bg-slate-100 dark:bg-slate-900 z-30 transform translate-x-full transition-transform duration-300 flex flex-col">
+            <div class="bg-white dark:bg-slate-800 shadow-sm border-b border-slate-200 dark:border-slate-700 p-4 shrink-0">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                        <span class="w-2 h-8 bg-emerald-500 rounded-full inline-block"></span>
+                        Historial de Transacciones
+                    </h2>
+                    <button onclick="toggleHistory()" class="text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white flex items-center gap-1 font-medium bg-slate-100 dark:bg-slate-700 px-4 py-2 rounded-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+                        </svg>
+                        Volver
+                    </button>
+                </div>
+
+                <div class="flex justify-end">
+                    <button onclick="confirmClearHistory()" class="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 flex items-center gap-2 font-medium bg-red-50 dark:bg-red-900/20 px-4 py-2 rounded-lg border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors" title="Borrar Historial">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Borrar Historial
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-auto p-6">
+                <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700 sticky top-0">
+                            <tr>
+                                <th class="p-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Fecha</th>
+                                <th class="p-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Placa / Cliente</th>
+                                <th class="p-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Tipo</th>
+                                <th class="p-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Servicio</th>
+                                <th class="p-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Total</th>
+                                <th class="p-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase text-right">Recibo</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody" class="divide-y divide-slate-100 dark:divide-slate-700 text-slate-700 dark:text-slate-300">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <div id="receipt-container" class="hidden font-receipt text-black bg-white" style="width: 80mm; max-width: 80mm; margin: 0 auto; padding: 10px;">
+        <div class="text-center pb-2 border-b-2 border-dashed border-black">
+            <h1 class="text-xl font-bold uppercase mb-1" id="rec-company-name">PARQUEADERO PRO</h1>
+            <div class="text-[10px] leading-tight font-bold">
+                <p id="rec-company-nit">NIT: 000.000.000-0</p>
+                <p id="rec-company-address">Dirección del Negocio</p>
+                <p id="rec-company-phone">Tel: 000-000-0000</p>
+            </div>
+        </div>
+        
+        <div class="py-2 text-center border-b border-black">
+            <h2 id="rec-type-title" class="font-bold text-lg uppercase">TICKET DE INGRESO</h2>
+            <p id="rec-date-full" class="text-[10px] mt-1">--/--/---- --:--:--</p>
+        </div>
+
+        <div class="py-3 space-y-2 text-xs">
+            <div class="flex justify-between items-center">
+                <span class="font-bold">PLACA:</span>
+                <span id="rec-plate-val" class="text-2xl font-bold font-mono">---</span>
+            </div>
+            <div class="flex justify-between">
+                <span>TIPO:</span>
+                <span id="rec-type-val" class="uppercase font-bold">---</span>
+            </div>
+            <div class="flex justify-between">
+                <span>SERVICIO:</span>
+                <span id="rec-service-val" class="text-right font-bold">---</span>
+            </div>
+            <div class="flex justify-between">
+                <span>TICKET ID:</span>
+                <span id="rec-id-val" class="font-mono">---</span>
+            </div>
+        </div>
+
+        <div class="border-t border-dotted border-black my-2"></div>
+
+        <div id="rec-customer-info" class="text-[10px] font-bold space-y-1 uppercase">
+            <div class="flex justify-between"><span>CLIENTE:</span> <span id="rec-name-val">---</span></div>
+            <div class="flex justify-between"><span>DOC:</span> <span id="rec-doc-val">---</span></div>
+            <div class="flex justify-between"><span>TEL:</span> <span id="rec-phone-val">---</span></div>
+        </div>
+
+        <div id="rec-exit-section" class="hidden mt-3 pt-3 border-t-2 border-dashed border-black">
+            <div class="flex justify-between text-[11px] font-bold uppercase">
+                <span>Entrada:</span> <span id="rec-in-val"></span>
+            </div>
+            <div class="flex justify-between text-[11px] font-bold uppercase">
+                <span>Salida:</span> <span id="rec-out-val"></span>
+            </div>
+            <div class="flex justify-between text-[11px] font-bold uppercase mb-2">
+                <span>Tiempo:</span> <span id="rec-time-val"></span>
+            </div>
+            
+            <div class="border-t border-black my-1"></div>
+            
+            <div class="space-y-1 text-[10px] mb-2">
+                <div class="flex justify-between"><span>Parqueo:</span> <span id="rec-park-val"></span></div>
+                <div class="flex justify-between"><span>Servicios:</span> <span id="rec-serv-val-detail"></span></div>
+            </div>
+
+            <div class="flex justify-between text-base font-bold border-t-2 border-black pt-1 bg-black text-white px-1">
+                <span>TOTAL:</span> <span id="rec-total-val"></span>
+            </div>
+        </div>
+
+        <div id="rec-entry-disclaimer" class="mt-4 pt-2 border-t border-black text-center">
+            <p class="text-[9px] leading-tight font-bold">
+                No nos hacemos responsables por objetos de valor no declarados.
+                <br><br>
+                CONSERVE ESTE TIQUETE PARA SALIDA.
+            </p>
+        </div>
+        
+        <div class="mt-4 text-[9px] text-center font-bold">*** GRACIAS POR SU PREFERENCIA ***</div>
+        <div class="mt-2 h-4"></div> </div>
+
+    <div id="ticketModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden z-[60] flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
+            <div class="p-4 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50 rounded-t-2xl">
+                <h3 class="font-bold text-lg dark:text-white">Ticket Generado</h3>
+                <button onclick="closeTicketModal()" class="text-slate-400 hover:text-red-500 text-2xl">&times;</button>
+            </div>
+            
+            <div class="p-6 bg-slate-200 dark:bg-slate-900/30 overflow-y-auto flex justify-center">
+                <div id="ticketModalContent" class="shadow-xl"></div>
+            </div>
+
+            <div class="p-4 border-t dark:border-slate-700 flex gap-3 bg-white dark:bg-slate-800 rounded-b-2xl">
+                <button onclick="closeTicketModal()" class="flex-1 py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cerrar</button>
+                <button onclick="window.print()" class="flex-[2] py-3 bg-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 flex items-center justify-center gap-2 transition-all transform active:scale-95">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    IMPRIMIR TICKET
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <div id="settingsModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col dark:text-white">
+            <div class="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
+                <h3 class="text-lg font-bold">Panel de Control</h3>
+                <button onclick="toggleSettings()" class="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            <div class="flex border-b border-slate-200 dark:border-slate-700">
+                <button onclick="switchTab('business')" id="tab-business" class="flex-1 py-3 text-sm font-medium border-b-2 border-emerald-500 text-emerald-600 dark:text-emerald-400 bg-slate-50 dark:bg-slate-800/50">
+                    🏢 Mi Negocio
+                </button>
+                <button onclick="switchTab('prices')" id="tab-prices" class="flex-1 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+                    💲 Tarifas
+                </button>
+                <button onclick="switchTab('data')" id="tab-data" class="flex-1 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+                    💾 Base de Datos
+                </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-6 bg-white dark:bg-slate-800">
+                <div id="content-business" class="space-y-4">
+                    <p class="text-xs text-slate-400 uppercase font-bold">Información de Facturación</p>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Nombre del Negocio</label>
+                            <input type="text" id="confName" class="w-full bg-slate-50 dark:bg-slate-700 border dark:border-slate-600 rounded p-2 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">NIT / ID Legal</label>
+                            <input type="text" id="confNit" class="w-full bg-slate-50 dark:bg-slate-700 border dark:border-slate-600 rounded p-2 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Dirección</label>
+                            <input type="text" id="confAddress" class="w-full bg-slate-50 dark:bg-slate-700 border dark:border-slate-600 rounded p-2 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Teléfono</label>
+                            <input type="text" id="confPhone" class="w-full bg-slate-50 dark:bg-slate-700 border dark:border-slate-600 rounded p-2 text-sm">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="content-prices" class="hidden space-y-6">
+                    <div>
+                        <p class="text-xs text-slate-400 uppercase font-bold mb-2">Parqueadero (Hora/Fracción)</p>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Carro</label>
+                                <input type="number" id="rateCar" class="w-full bg-slate-50 dark:bg-slate-700 border dark:border-slate-600 rounded focus:ring-emerald-500 p-2 font-mono">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Moto</label>
+                                <input type="number" id="rateMoto" class="w-full bg-slate-50 dark:bg-slate-700 border dark:border-slate-600 rounded focus:ring-emerald-500 p-2 font-mono">
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-400 uppercase font-bold mb-2">Servicios de Lavado</p>
+                        <div id="servicesListConfig" class="space-y-3 mb-4">
+                            </div>
+                        
+                        <div class="bg-slate-50 dark:bg-slate-700/30 p-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-600">
+                            <p class="text-[10px] text-slate-400 uppercase font-bold mb-2">Agregar Nuevo Servicio</p>
+                            <div class="flex gap-2">
+                                <input type="text" id="newServiceName" placeholder="Nombre (ej. Polichado)" class="flex-[2] bg-white dark:bg-slate-800 border dark:border-slate-600 rounded p-2 text-sm">
+                                <input type="number" id="newServicePrice" placeholder="Precio" class="flex-1 bg-white dark:bg-slate-800 border dark:border-slate-600 rounded p-2 text-sm">
+                                <button onclick="addNewService()" class="bg-emerald-500 hover:bg-emerald-600 text-white p-2 rounded-lg font-bold shadow-lg shadow-emerald-500/30 transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="content-data" class="hidden space-y-6 text-center">
+                    <div class="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
+                        <h4 class="font-bold text-blue-700 dark:text-blue-300 mb-2">Respaldo de Seguridad</h4>
+                        <p class="text-xs text-slate-600 dark:text-slate-400 mb-4">Descarga un archivo JSON con toda la información.</p>
+                        <button onclick="exportData()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 w-full">
+                            Descargar Backup (.json)
+                        </button>
+                    </div>
+
+                    <div class="p-4 bg-slate-50 dark:bg-slate-700/30 rounded-xl border border-slate-200 dark:border-slate-600">
+                        <h4 class="font-bold text-slate-700 dark:text-slate-300 mb-2">Restaurar Datos</h4>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">Sube un archivo de respaldo. <span class="text-amber-500 font-bold">Reemplazará los datos actuales.</span></p>
+                        <button onclick="importData()" class="bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 w-full">
+                            Subir Archivo de Respaldo
+                        </button>
+                    </div>
+
+                    <div class="pt-4 border-t border-slate-100 dark:border-slate-700">
+                        <button onclick="resetData()" class="text-red-500 hover:text-red-700 text-xs font-bold uppercase tracking-wider">
+                            Borrar todo (Factory Reset)
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="p-4 bg-slate-50 dark:bg-slate-900/50 flex justify-end border-t border-slate-200 dark:border-slate-700">
+                <button onclick="saveSettings()" class="bg-emerald-500 text-white px-8 py-3 rounded-xl hover:bg-emerald-600 font-bold shadow-lg shadow-emerald-200 dark:shadow-none">
+                    Guardar y Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="reportModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col dark:text-white">
+            <div class="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-indigo-50 dark:bg-indigo-900/30">
+                <div class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    <h3 class="text-lg font-bold">Reporte Diario</h3>
+                </div>
+                <button onclick="toggleReport()" class="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
+            </div>
+
+            <div class="p-6 overflow-y-auto bg-slate-50 dark:bg-slate-900/50 space-y-6">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow border border-slate-200 dark:border-slate-700">
+                        <p class="text-xs font-bold text-slate-400 uppercase">Vehículos Atendidos</p>
+                        <p class="text-3xl font-bold text-slate-800 dark:text-white mt-2" id="reportAttendedCount">0</p>
+                        <p class="text-[10px] text-slate-400">(Salieron y Pagaron)</p>
+                    </div>
+                    <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow border border-slate-200 dark:border-slate-700">
+                        <p class="text-xs font-bold text-slate-400 uppercase">Servicios de Lavado</p>
+                        <p class="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-2" id="reportWashCount">0</p>
+                        <p class="text-[10px] text-slate-400">(Realizados)</p>
+                    </div>
+                </div>
+
+                <div class="bg-emerald-50 dark:bg-emerald-900/20 p-5 rounded-xl border border-emerald-200 dark:border-emerald-800 text-center">
+                    <p class="text-sm font-bold text-emerald-800 dark:text-emerald-200 uppercase mb-1">Venta Total del Día</p>
+                    <p class="text-4xl font-bold text-emerald-600 dark:text-emerald-400" id="reportTotalRevenue">$0</p>
+                </div>
+
+                <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <h4 class="font-bold text-sm mb-2 text-slate-700 dark:text-slate-300">Desglose Rápido</h4>
+                    <ul class="text-sm space-y-2 text-slate-600 dark:text-slate-400">
+                        <li class="flex justify-between">
+                            <span>Carros Atendidos:</span>
+                            <span class="font-bold" id="reportCarCount">0</span>
+                        </li>
+                        <li class="flex justify-between">
+                            <span>Motos Atendidas:</span>
+                            <span class="font-bold" id="reportMotoCount">0</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="p-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700">
+                <button onclick="resetDailyStats()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl shadow-lg hover:shadow-red-600/30 transition-all flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    REINICIAR DÍA (Cerrar Caja)
+                </button>
+                <p class="text-[10px] text-center text-slate-400 mt-2">Esto pondrá el contador a cero y archivará el historial actual.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div id="checkoutModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all scale-100 dark:text-white flex flex-col max-h-[90vh]">
+            
+            <div class="bg-slate-800 dark:bg-slate-950 p-5 text-white relative overflow-hidden shrink-0">
+                <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 via-blue-500 to-purple-500"></div>
+                <div class="flex justify-between items-start relative z-10">
+                    <div>
+                        <p class="text-slate-400 text-xs uppercase font-bold tracking-wider mb-1">Cobro de Servicio</p>
+                        <h3 class="text-3xl font-mono font-bold tracking-tight" id="checkoutPlate">ABC-123</h3>
+                    </div>
+                    <div id="checkoutTypeIcon" class="bg-white/10 p-2 rounded-lg backdrop-blur-sm">
+                        </div>
+                </div>
+            </div>
+
+            <div class="p-6 overflow-y-auto custom-scrollbar">
+                
+                <div class="mb-5 bg-slate-50 dark:bg-slate-700/30 p-4 rounded-xl border border-slate-100 dark:border-slate-700">
+                    <h4 class="text-[10px] uppercase font-bold text-slate-400 mb-3 flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        Verificar Propietario
+                    </h4>
+                    <div class="space-y-2">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-300">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                            </div>
+                            <div class="flex-1">
+                                <p class="text-xs text-slate-400">Nombre</p>
+                                <p class="font-bold text-sm text-slate-700 dark:text-slate-200" id="checkoutOwner">---</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4 pl-11">
+                            <div>
+                                <p class="text-xs text-slate-400">Cédula</p>
+                                <p class="font-mono text-sm text-slate-600 dark:text-slate-300" id="checkoutId">---</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-slate-400">Celular</p>
+                                <p class="font-mono text-sm text-slate-600 dark:text-slate-300" id="checkoutPhone">---</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center py-2 border-b border-dashed border-slate-200 dark:border-slate-700">
+                        <span class="text-slate-500 dark:text-slate-400 text-sm">Tiempo Estadía</span>
+                        <span class="font-mono font-bold text-slate-800 dark:text-white" id="checkoutTime">0:00:00</span>
+                    </div>
+                    <div class="flex justify-between items-center py-2 border-b border-dashed border-slate-200 dark:border-slate-700">
+                        <span class="text-slate-500 dark:text-slate-400 text-sm">Tarifa Parqueo</span>
+                        <span class="font-mono font-bold text-slate-800 dark:text-white" id="checkoutParkingCost">$0</span>
+                    </div>
+                    <div class="flex justify-between items-center py-2 border-b border-slate-200 dark:border-slate-700">
+                        <span class="text-slate-500 dark:text-slate-400 text-sm">Servicios Adicionales</span>
+                        <span class="font-mono font-bold text-slate-800 dark:text-white" id="checkoutServiceCost">$0</span>
+                    </div>
+                    
+                    <div class="flex justify-between items-end pt-2">
+                        <span class="text-lg font-bold text-slate-800 dark:text-white">Total a Pagar</span>
+                        <div class="text-right">
+                            <span class="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 leading-none" id="checkoutTotal">$0</span>
+                        </div>
+                    </div>
+
+                    <label class="flex items-center justify-end gap-2 mt-2 cursor-pointer group">
+                        <input type="checkbox" id="printOnCheckout" class="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500" checked>
+                        <span class="text-xs text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors">Generar recibo físico automáticamente</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="p-5 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 gap-3 grid grid-cols-2 shrink-0">
+                <button onclick="closeCheckout()" class="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-bold py-3 px-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    CANCELAR
+                </button>
+                <button onclick="confirmCheckout()" class="w-full bg-emerald-500 text-white font-bold py-3 px-4 rounded-xl hover:bg-emerald-600 shadow-lg shadow-emerald-200 dark:shadow-none transition-all transform active:scale-95 flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    COBRAR
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="clearHistoryModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all scale-100 dark:text-white">
+            <div class="bg-red-600 dark:bg-red-700 p-6 text-white text-center relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-400 to-orange-500"></div>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <h3 class="text-2xl font-bold mb-1">⚠️ ADVERTENCIA</h3>
+                <p class="text-red-100 text-sm">Esta acción NO se puede deshacer</p>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                    <p class="text-sm text-amber-800 dark:text-amber-200 font-medium">
+                        Estás a punto de <strong>ELIMINAR PERMANENTEMENTE</strong> todo el historial de transacciones.
+                    </p>
+                    <p class="text-xs text-amber-700 dark:text-amber-300 mt-2">
+                        Los vehículos activos y la configuración NO se verán afectados.
+                    </p>
+                </div>
+
+                <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <p class="text-sm text-blue-800 dark:text-blue-200 font-bold mb-2">💡 Recomendación:</p>
+                    <p class="text-xs text-blue-700 dark:text-blue-300">
+                        Descarga una copia de seguridad antes de continuar. Podrás restaurarla más tarde si la necesitas.
+                    </p>
+                </div>
+            </div>
+            <div class="p-4 gap-3 grid grid-cols-1">
+                <button onclick="exportData(); closeClearHistoryModal();" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    💾 Descargar Copia de Seguridad
+                </button>
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="closeClearHistoryModal()" class="w-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold py-3 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
+                        Cancelar
+                    </button>
+                    <button onclick="executeClearHistory()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl shadow-lg transition-colors">
+                        🗑️ Sí, Borrar Todo
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- State Management ---
+        const DEFAULT_RATES = { car: 5000, moto: 2000 };
+        const DEFAULT_COMPANY = {
+            name: 'PARQUEADERO PRO',
+            nit: '900.000.000-1',
+            address: 'Calle Falsa 123',
+            phone: '(601) 234-5678'
+        };
+        const DEFAULT_SERVICES = [
+            { id: 'none', name: 'Solo Parqueadero', price: 0 },
+            { id: 'wash_basic', name: 'Lavado Básico', price: 15000 },
+            { id: 'wash_full', name: 'Lavado General + Polichado', price: 25000 },
+            { id: 'wash_motor', name: 'Lavado Motor', price: 30000 }
+        ];
+
+        let state = {
+            rates: { ...DEFAULT_RATES },
+            company: { ...DEFAULT_COMPANY },
+            services: [...DEFAULT_SERVICES],
+            vehicles: [],
+            history: [],
+            revenue: 0,
+            darkMode: false
+        };
+
+        let tempCheckoutId = null;
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadData();
+            applyTheme();
+            updateClock();
+            setInterval(updateClock, 1000);
+            setInterval(renderTable, 1000);
+
+            updateCompanyUI();
+
+            renderServicesSelect();
+            renderTable();
+            renderHistoryTable();
+            updateStats();
+        });
+
+        // --- Logic ---
+
+        function loadData() {
+            const saved = localStorage.getItem('parkingApp_v3');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    state = {
+                        ...state,
+                        ...parsed,
+                        services: parsed.services && parsed.services.length ? parsed.services : [...DEFAULT_SERVICES]
+                    };
+                } catch (e) { console.error("Error loading data", e); }
+            } else {
+                const v2 = localStorage.getItem('parkingApp_v2');
+                if (v2) {
+                    try {
+                        const parsed = JSON.parse(v2);
+                        state = { ...state, ...parsed };
+                    } catch (e) { }
+                }
+            }
+        }
+
+        function saveData() {
+            localStorage.setItem('parkingApp_v3', JSON.stringify(state));
+            updateStats();
+            updateCompanyUI();
+            renderServicesSelect();
+        }
+
+        // --- Entry Logic ---
+        function handleEntry(e) {
+            e.preventDefault();
+            const plate = document.getElementById('plateInput').value.trim().toUpperCase();
+            if (!plate) return showMessage('Ingrese una placa válida', 'error');
+
+            if (state.vehicles.find(v => v.plate === plate)) {
+                return showMessage('¡El vehículo ya está dentro!', 'error');
+            }
+
+            // New Fields
+            const ownerName = document.getElementById('ownerNameInput').value.trim();
+            const ownerPhone = document.getElementById('ownerPhoneInput').value.trim();
+            const ownerId = document.getElementById('ownerIdInput').value.trim();
+
+            const type = document.querySelector('input[name="vehicleType"]:checked').value;
+            const serviceId = document.getElementById('serviceInput').value;
+            const entryTime = Date.now();
+
+            const newVehicle = {
+                id: crypto.randomUUID(),
+                plate,
+                ownerName,
+                ownerPhone,
+                ownerId,
+                type,
+                serviceId,
+                entryTime
+            };
+
+            state.vehicles.push(newVehicle);
+            saveData();
+            renderTable();
+
+            // Reset Form
+            document.getElementById('plateInput').value = '';
+            document.getElementById('ownerNameInput').value = '';
+            document.getElementById('ownerPhoneInput').value = '';
+            document.getElementById('ownerIdInput').value = '';
+            document.getElementById('plateInput').focus();
+            
+            showMessage('Vehículo registrado con éxito', 'success');
+
+            // Mostrar modal de preview
+            showTicketPreview(newVehicle, 'entry');
+        }
+
+        function showMessage(msg, type) {
+            const el = document.getElementById('entryMessage');
+            el.textContent = msg;
+            el.className = `text-center text-sm font-medium h-5 ${type === 'error' ? 'text-red-500' : 'text-emerald-600'}`;
+            setTimeout(() => el.textContent = '', 3000);
+        }
+
+        // --- Ticket Preview Modal Functions ---
+        
+        function showTicketPreview(item, type) {
+            // Primero preparamos el contenido del ticket en el DOM oculto
+            fillReceiptData(item, type);
+            
+            // Clonamos el ticket para ponerlo en el modal
+            const receiptContent = document.getElementById('receipt-container').cloneNode(true);
+            receiptContent.classList.remove('hidden');
+            receiptContent.style.display = 'block'; // Asegurar que se vea en el modal
+            
+            const modalContent = document.getElementById('ticketModalContent');
+            modalContent.innerHTML = ''; // Limpiar previo
+            modalContent.appendChild(receiptContent);
+            
+            // Mostrar Modal
+            document.getElementById('ticketModal').classList.remove('hidden');
+        }
+
+        function closeTicketModal() {
+            document.getElementById('ticketModal').classList.add('hidden');
+        }
+
+        // --- Checkout & Printing ---
+
+        function startCheckout(id) {
+            const vehicle = state.vehicles.find(v => v.id === id);
+            if (!vehicle) return;
+
+            tempCheckoutId = id;
+            const { total, parkingTotal, serviceTotal, hoursCharged, durationMs, service } = calculateCost(vehicle);
+
+            // Populate Modal Data
+            document.getElementById('checkoutPlate').textContent = vehicle.plate;
+            
+            // Icon Logic
+            const iconContainer = document.getElementById('checkoutTypeIcon');
+            if(vehicle.type === 'car') {
+                iconContainer.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>'; // Icono genérico o especifico de carro
+            } else {
+                iconContainer.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>'; // Icono moto/rayo
+            }
+
+            // Owner Info Logic
+            document.getElementById('checkoutOwner').textContent = vehicle.ownerName || 'Sin registrar';
+            document.getElementById('checkoutId').textContent = vehicle.ownerId || '---';
+            document.getElementById('checkoutPhone').textContent = vehicle.ownerPhone || '---';
+
+            // Cost Logic
+            document.getElementById('checkoutTime').textContent = formatDuration(durationMs);
+            document.getElementById('checkoutParkingCost').textContent = formatCurrency(parkingTotal) + ` (${hoursCharged}h)`;
+            document.getElementById('checkoutServiceCost').textContent = formatCurrency(serviceTotal) + ` (${service.name})`;
+            document.getElementById('checkoutTotal').textContent = formatCurrency(total);
+
+            // Default Checkbox to checked
+            document.getElementById('printOnCheckout').checked = true;
+            
+            document.getElementById('checkoutModal').classList.remove('hidden');
+        }
+
+        function calculateCost(vehicle) {
+            const now = Date.now();
+            const durationMs = now - vehicle.entryTime;
+            const durationHours = durationMs / (1000 * 60 * 60);
+            const hoursCharged = Math.max(1, Math.ceil(durationHours));
+
+            const rate = vehicle.type === 'car' ? state.rates.car : state.rates.moto;
+            const parkingTotal = hoursCharged * rate;
+
+            const service = state.services.find(s => s.id === vehicle.serviceId) || state.services[0];
+            const serviceTotal = service.price;
+
+            const total = parkingTotal + serviceTotal;
+
+            return { total, parkingTotal, serviceTotal, hoursCharged, durationMs, service, now };
+        }
+
+        function closeCheckout() {
+            document.getElementById('checkoutModal').classList.add('hidden');
+            tempCheckoutId = null;
+        }
+
+        function confirmCheckout() {
+            if (!tempCheckoutId) return;
+
+            const vehicle = state.vehicles.find(v => v.id === tempCheckoutId);
+            if (vehicle) {
+                const costs = calculateCost(vehicle);
+                state.revenue += costs.total;
+
+                const historyItem = {
+                    ...vehicle,
+                    exitTime: costs.now,
+                    total: costs.total,
+                    parkingTotal: costs.parkingTotal,
+                    serviceTotal: costs.serviceTotal,
+                    hours: costs.hoursCharged
+                };
+
+                state.history.unshift(historyItem);
+                state.vehicles = state.vehicles.filter(v => v.id !== tempCheckoutId);
+
+                saveData();
+                renderTable();
+                renderHistoryTable();
+
+                const shouldPrint = document.getElementById('printOnCheckout').checked;
+                closeCheckout();
+
+                if (shouldPrint) {
+                    // Si elige imprimir al salir, mostramos el modal de preview
+                    showTicketPreview(historyItem, 'exit');
+                }
+            }
+        }
+
+        function fillReceiptData(item, type) {
+            // Datos empresa
+            document.getElementById('rec-company-name').textContent = state.company.name;
+            document.getElementById('rec-company-nit').textContent = 'NIT: ' + state.company.nit;
+            document.getElementById('rec-company-address').textContent = state.company.address;
+            document.getElementById('rec-company-phone').textContent = 'Tel: ' + state.company.phone;
+
+            // Datos Generales
+            document.getElementById('rec-date-full').textContent = new Date().toLocaleString();
+            document.getElementById('rec-plate-val').textContent = item.plate;
+            document.getElementById('rec-type-val').textContent = item.type === 'car' ? 'Carro' : 'Moto';
+            document.getElementById('rec-id-val').textContent = (item.id || '').toString().substring(0, 8).toUpperCase();
+
+            // Cliente
+            document.getElementById('rec-name-val').textContent = item.ownerName ? item.ownerName.substring(0, 20) : '---';
+            document.getElementById('rec-doc-val').textContent = item.ownerId || '---';
+            document.getElementById('rec-phone-val').textContent = item.ownerPhone || '---';
+
+            // Servicio
+            let serviceName = "Básico";
+            const serviceObj = state.services.find(s => s.id === item.serviceId);
+            if (serviceObj) serviceName = serviceObj.name;
+            document.getElementById('rec-service-val').textContent = serviceName;
+
+            // Lógica por tipo
+            const exitSection = document.getElementById('rec-exit-section');
+            const entryDisc = document.getElementById('rec-entry-disclaimer');
+
+            if (type === 'entry') {
+                document.getElementById('rec-type-title').textContent = "COMPROBANTE DE INGRESO";
+                document.getElementById('rec-in-val').textContent = new Date(item.entryTime).toLocaleString();
+                exitSection.classList.add('hidden');
+                entryDisc.classList.remove('hidden');
+            } else {
+                document.getElementById('rec-type-title').textContent = "RECIBO DE CAJA";
+                exitSection.classList.remove('hidden');
+                entryDisc.classList.add('hidden');
+
+                // Llenar datos de salida
+                document.getElementById('rec-in-val').textContent = new Date(item.entryTime).toLocaleTimeString();
+                document.getElementById('rec-out-val').textContent = new Date(item.exitTime).toLocaleTimeString();
+
+                const diff = item.exitTime - item.entryTime;
+                document.getElementById('rec-time-val').textContent = formatDuration(diff);
+
+                document.getElementById('rec-park-val').textContent = formatCurrency(item.parkingTotal);
+                document.getElementById('rec-serv-val-detail').textContent = formatCurrency(item.serviceTotal);
+                document.getElementById('rec-total-val').textContent = formatCurrency(item.total);
+            }
+        }
+
+        // Wrapper antiguo para compatibilidad con botones existentes en historial
+        function printReceipt(item, type) {
+             showTicketPreview(item, type);
+        }
+
+        // --- Rendering & Search ---
+
+        function renderTable() {
+            const tbody = document.getElementById('vehicleTableBody');
+            const empty = document.getElementById('emptyState');
+            const searchQuery = document.getElementById('searchInput').value.toLowerCase();
+
+            // Filter logic
+            const filteredVehicles = state.vehicles.filter(v => {
+                if (!searchQuery) return true;
+                const matchPlate = v.plate.toLowerCase().includes(searchQuery);
+                const matchName = v.ownerName && v.ownerName.toLowerCase().includes(searchQuery);
+                const matchPhone = v.ownerPhone && v.ownerPhone.includes(searchQuery);
+                const matchId = v.ownerId && v.ownerId.includes(searchQuery);
+                return matchPlate || matchName || matchPhone || matchId;
+            });
+
+            if (filteredVehicles.length === 0) {
+                tbody.innerHTML = '';
+                empty.classList.remove('hidden');
+                empty.classList.add('flex');
+                if (state.vehicles.length > 0) {
+                    empty.querySelector('p').textContent = "No se encontraron resultados";
+                } else {
+                    empty.querySelector('p').textContent = "No hay vehículos registrados";
+                }
+                return;
+            }
+
+            empty.classList.add('hidden');
+            empty.classList.remove('flex');
+
+            const now = Date.now();
+
+            tbody.innerHTML = filteredVehicles.map(v => {
+                const service = state.services.find(s => s.id === v.serviceId);
+                const diff = now - v.entryTime;
+
+                return `
+                <tr class="hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors border-b border-slate-50 dark:border-slate-700">
+                    <td class="p-4">
+                        <div class="font-mono font-bold text-slate-700 dark:text-slate-200 text-lg leading-none">${v.plate}</div>
+                        ${v.ownerName ? `<div class="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate max-w-[150px]" title="${v.ownerName}">👤 ${v.ownerName}</div>` : ''}
+                    </td>
+                    <td class="p-4">
+                        <span class="px-2 py-1 rounded-md text-xs font-bold uppercase ${v.type === 'car' ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200' : 'bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-200'}">
+                            ${v.type === 'car' ? 'Carro' : 'Moto'}
+                        </span>
+                    </td>
+                    <td class="p-4 text-sm text-slate-500 dark:text-slate-400">${new Date(v.entryTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                    <td class="p-4 text-sm text-slate-600 dark:text-slate-300">${service ? service.name : '-'}</td>
+                    <td class="p-4 font-mono text-slate-700 dark:text-emerald-400 font-medium">${formatDuration(diff)}</td>
+                    <td class="p-4 text-right">
+                        <button onclick="startCheckout('${v.id}')" class="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500 hover:text-white border border-emerald-200 dark:border-emerald-800 px-3 py-1 rounded-lg text-sm font-bold transition-all">
+                            Cobrar
+                        </button>
+                    </td>
+                </tr>
+                `;
+            }).join('');
+        }
+
+        function renderHistoryTable() {
+            const tbody = document.getElementById('historyTableBody');
+
+            if (state.history.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-slate-400">Sin historial aún</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = state.history.map(item => {
+                const service = state.services.find(s => s.id === item.serviceId);
+                return `
+                <tr class="border-b border-slate-50 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700">
+                     <td class="p-4 text-xs text-slate-500 dark:text-slate-400">${new Date(item.exitTime).toLocaleString()}</td>
+                    <td class="p-4">
+                        <div class="font-mono font-bold text-slate-600 dark:text-slate-200">${item.plate}</div>
+                        ${item.ownerName ? `<div class="text-xs text-slate-400">${item.ownerName}</div>` : ''}
+                    </td>
+                    <td class="p-4 text-xs uppercase text-slate-500">${item.type}</td>
+                    <td class="p-4 text-sm text-slate-600 dark:text-slate-300">${service ? service.name : '-'}</td>
+                    <td class="p-4 font-bold text-emerald-600 dark:text-emerald-400">${formatCurrency(item.total)}</td>
+                    <td class="p-4 text-right">
+                         <button onclick='printReceipt(${JSON.stringify(item).replace(/'/g, "&#39;")}, "exit")' class="text-slate-400 hover:text-blue-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                            </svg>
+                        </button>
+                    </td>
+                </tr>
+                `;
+            }).join('');
+        }
+
+        // --- Other Helpers (Settings, formats, etc) ---
+
+        function renderServicesSelect() {
+            const select = document.getElementById('serviceInput');
+            const val = select.value;
+            select.innerHTML = state.services.map(s =>
+                `<option value="${s.id}">${s.name} - ${formatCurrency(s.price)}</option>`
+            ).join('');
+            if (val) select.value = val;
+        }
+
+        function updateStats() {
+            document.getElementById('activeCount').textContent = state.vehicles.length;
+            document.getElementById('totalRevenue').textContent = formatCurrency(state.revenue);
+        }
+
+        function updateCompanyUI() {
+            document.getElementById('headerAppName').textContent = state.company.name || 'Gestión de Parqueadero';
+        }
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').textContent = now.toLocaleTimeString();
+            document.getElementById('date').textContent = now.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
+        }
+
+        function formatCurrency(num) {
+            return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(num);
+        }
+
+        function formatDuration(ms) {
+            const seconds = Math.floor((ms / 1000) % 60);
+            const minutes = Math.floor((ms / (1000 * 60)) % 60);
+            const hours = Math.floor((ms / (1000 * 60 * 60)));
+            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        function toggleHistory() {
+            document.getElementById('historyPanel').classList.toggle('translate-x-full');
+        }
+
+        function toggleTheme() {
+            state.darkMode = !state.darkMode;
+            applyTheme();
+            saveData();
+        }
+
+        function applyTheme() {
+            const html = document.querySelector('html');
+            const sun = document.getElementById('themeIconSun');
+            const moon = document.getElementById('themeIconMoon');
+
+            if (state.darkMode) {
+                html.classList.add('dark');
+                sun.classList.remove('hidden');
+                moon.classList.add('hidden');
+            } else {
+                html.classList.remove('dark');
+                sun.classList.add('hidden');
+                moon.classList.remove('hidden');
+            }
+        }
+
+        // Settings Modal Helpers
+        function toggleSettings() {
+            const m = document.getElementById('settingsModal');
+            if (m.classList.contains('hidden')) {
+                document.getElementById('rateCar').value = state.rates.car;
+                document.getElementById('rateMoto').value = state.rates.moto;
+                document.getElementById('confName').value = state.company.name;
+                document.getElementById('confNit').value = state.company.nit;
+                document.getElementById('confAddress').value = state.company.address;
+                document.getElementById('confPhone').value = state.company.phone;
+
+                // Ahora llamamos a la funcion que renderiza los servicios
+                renderServicesConfig();
+
+                m.classList.remove('hidden');
+            } else {
+                m.classList.add('hidden');
+            }
+        }
+        
+        // --- NUEVAS FUNCIONES PARA GESTIONAR SERVICIOS DINAMICOS ---
+        
+        function renderServicesConfig() {
+            const container = document.getElementById('servicesListConfig');
+            container.innerHTML = state.services.map((s, idx) => `
+                <div class="flex items-center gap-3 bg-slate-50 dark:bg-slate-700/50 p-2 rounded-lg border border-slate-200 dark:border-slate-600">
+                    <span class="flex-1 text-sm font-medium text-slate-700 dark:text-slate-300">${s.name}</span>
+                    <input type="number" 
+                        onchange="updateServicePrice(${idx}, this.value)"
+                        value="${s.price}" 
+                        class="w-24 text-right bg-white dark:bg-slate-800 border dark:border-slate-600 rounded p-1 text-sm font-mono"
+                        ${s.id === 'none' ? 'disabled' : ''}>
+                        
+                    ${s.id !== 'none' ? `
+                    <button onclick="removeService(${idx})" class="text-red-400 hover:text-red-600 p-1" title="Eliminar servicio">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                    ` : '<div class="w-6"></div>'}
+                </div>
+            `).join('');
+        }
+        
+        function addNewService() {
+            const nameInput = document.getElementById('newServiceName');
+            const priceInput = document.getElementById('newServicePrice');
+            
+            const name = nameInput.value.trim();
+            const price = parseInt(priceInput.value);
+            
+            if(!name || isNaN(price)) {
+                alert('Por favor ingrese un nombre y un precio válido.');
+                return;
+            }
+            
+            const newService = {
+                id: 'svc_' + Date.now(),
+                name: name,
+                price: price
+            };
+            
+            state.services.push(newService);
+            saveData();
+            
+            // Limpiar inputs
+            nameInput.value = '';
+            priceInput.value = '';
+            
+            // Renderizar de nuevo
+            renderServicesConfig();
+        }
+        
+        function removeService(index) {
+            if(confirm('¿Eliminar este servicio de la lista?')) {
+                state.services.splice(index, 1);
+                saveData();
+                renderServicesConfig();
+            }
+        }
+
+        function switchTab(tab) {
+            ['business', 'prices', 'data'].forEach(t => {
+                document.getElementById(`content-${t}`).classList.add('hidden');
+                document.getElementById(`tab-${t}`).className = "flex-1 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200";
+            });
+
+            document.getElementById(`content-${tab}`).classList.remove('hidden');
+            document.getElementById(`tab-${tab}`).className = "flex-1 py-3 text-sm font-medium border-b-2 border-emerald-500 text-emerald-600 dark:text-emerald-400 bg-slate-50 dark:bg-slate-800/50";
+        }
+
+        function updateServicePrice(idx, val) {
+            state.services[idx].price = parseInt(val) || 0;
+        }
+
+        function saveSettings() {
+            const carRate = parseInt(document.getElementById('rateCar').value) || 0;
+            const motoRate = parseInt(document.getElementById('rateMoto').value) || 0;
+            state.rates.car = carRate;
+            state.rates.moto = motoRate;
+
+            state.company.name = document.getElementById('confName').value.trim();
+            state.company.nit = document.getElementById('confNit').value.trim();
+            state.company.address = document.getElementById('confAddress').value.trim();
+            state.company.phone = document.getElementById('confPhone').value.trim();
+
+            saveData();
+            document.getElementById('settingsModal').classList.add('hidden');
+        }
+
+        function exportData() {
+            const dataStr = JSON.stringify(state, null, 2);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            const date = new Date().toISOString().slice(0, 10);
+            a.href = url;
+            a.download = `backup_parqueadero_${date}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function importData() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+
+            input.onchange = e => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = event => {
+                    try {
+                        const json = JSON.parse(event.target.result);
+                        if (!json.vehicles || !json.history) throw new Error("Formato inválido");
+                        if (confirm(`¿Restaurar datos? Se reemplazarán los actuales.`)) {
+                            state = json;
+                            saveData();
+                            location.reload();
+                        }
+                    } catch (err) {
+                        alert('Error: Archivo inválido.');
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        function resetData() {
+            if (confirm('¿Borrar TODO?')) {
+                localStorage.removeItem('parkingApp_v3');
+                location.reload();
+            }
+        }
+
+        // --- Clear History Functions ---
+        function confirmClearHistory() {
+            document.getElementById('clearHistoryModal').classList.remove('hidden');
+        }
+
+        function closeClearHistoryModal() {
+            document.getElementById('clearHistoryModal').classList.add('hidden');
+        }
+
+        function executeClearHistory() {
+            state.history = [];
+            saveData();
+            renderHistoryTable();
+            closeClearHistoryModal();
+
+            // Show success message briefly
+            const tempMsg = document.createElement('div');
+            tempMsg.className = 'fixed top-4 right-4 bg-emerald-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 font-bold';
+            tempMsg.textContent = '✓ Historial eliminado correctamente';
+            document.body.appendChild(tempMsg);
+            setTimeout(() => tempMsg.remove(), 3000);
+        }
+
+        // --- REPORT & RESET DAY LOGIC ---
+        function toggleReport() {
+            const modal = document.getElementById('reportModal');
+            if(modal.classList.contains('hidden')) {
+                // Calcular estadísticas antes de mostrar
+                const attended = state.history.length;
+                const washes = state.history.filter(h => h.serviceId !== 'none' && h.serviceId !== '0').length;
+                const cars = state.history.filter(h => h.type === 'car').length;
+                const motos = state.history.filter(h => h.type === 'moto').length;
+                
+                document.getElementById('reportAttendedCount').textContent = attended;
+                document.getElementById('reportWashCount').textContent = washes;
+                document.getElementById('reportCarCount').textContent = cars;
+                document.getElementById('reportMotoCount').textContent = motos;
+                document.getElementById('reportTotalRevenue').textContent = formatCurrency(state.revenue);
+                
+                modal.classList.remove('hidden');
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function resetDailyStats() {
+            if(confirm('¿Está seguro de cerrar el día? Esto reiniciará el contador de ventas a $0 y limpiará el historial de hoy para comenzar un nuevo registro.')) {
+                // Reiniciar venta y limpiar historial (ya que el usuario pidió reiniciar el día)
+                state.revenue = 0;
+                state.history = []; // Limpiamos el historial para que coincida con un día nuevo
+                
+                saveData();
+                renderHistoryTable();
+                updateStats();
+                toggleReport(); // Cerrar modal
+                
+                // Mensaje de éxito
+                const tempMsg = document.createElement('div');
+                tempMsg.className = 'fixed top-4 right-4 bg-indigo-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 font-bold';
+                tempMsg.textContent = '✓ Día reiniciado correctamente';
+                document.body.appendChild(tempMsg);
+                setTimeout(() => tempMsg.remove(), 3000);
+            }
+        }
+    </script>
+</body>
+</html>
